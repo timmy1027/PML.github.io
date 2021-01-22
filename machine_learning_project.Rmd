@@ -1,0 +1,120 @@
+---
+title: "machine_learning_project"
+author: "Tianming"
+date: "1/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, results='hide'}
+library(tidyverse)
+library(rpart)
+library(caret)
+library(xgboost)
+library(randomForest)
+```
+
+## Data downloading
+```{r, results='hide', cache=TRUE}
+Train_Url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+Test_Url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+if(!file.exists("./data")){dir.create("./data")}
+download.file(url = Train_Url, destfile = "./data/pml-training.csv", method = "curl")
+download.file(url = Test_Url, destfile = "./data/pml-testing.csv", method = "curl")
+```
+
+
+## Data loading and preprocessing
+```{r}
+train_df <- read.csv(file = "./data/pml-training.csv", na.strings = c("NA", "#DIV/0", ""), header = T)
+test_df <- read.csv(file = "./data/pml-testing.csv", na.strings = c("NA", "#DIV/0", ""), header = T)
+# remove columns which only contain NAs
+train_df <- train_df[, colSums(is.na(train_df)) == 0]
+test_df <- test_df[, colSums(is.na(test_df)) == 0]
+# remove unused columns
+train_df <- train_df[, -c(1:7)]
+test_df <- test_df[, -c(1:7)]
+
+# summary of exercise classes
+table(train_df$classe)
+```
+
+## Class of exercise given the Note from original study
+classA = specified execution of the exercise <br/>
+classB = throwing the elbows to the front <br/>
+classC = lifting the dumbbell only halfway <br/>
+classD = lowering the dumbbell only halfway <br/>
+classE = throwing the hips to the front <br/>
+
+## Subset training dataset for modeling
+```{r}
+set.seed(123)
+subsampling <- train_df$classe %>%
+  createDataPartition(p = 0.8, list = FALSE)
+
+df_train_sub <- train_df[subsampling, ]
+df_test_sub <- train_df[-subsampling, ]
+```
+
+
+## Train with descision tree
+```{r}
+set.seed(1988)
+mod_rpart <- train(classe ~., data = df_train_sub, method = "rpart",
+                   #set up 10-fold cross validation
+                   trControl = trainControl("cv", number = 10))
+
+# plot model accuracy vs different value of cp (complexity parameter)
+plot(mod_rpart)
+mod_rpart$bestTune
+```
+The best cp value is 0.036. The smaller the cp is, the higher chance we would get an overfitting model. Let's test the predictions
+
+
+## Accuracy of descision tree model
+```{r}
+pred_train_rpart <- predict(mod_rpart, df_test_sub)
+cmModrpart <- confusionMatrix(pred_train_rpart, df_test_sub$classe)
+# descision tree model accuracy
+data.frame(Accuracy = cmModrpart$overall[1], 
+           RMSE = RMSE(as.numeric(pred_train_rpart), as.numeric(df_test_sub$classe)),
+           R2 = R2(as.numeric(pred_train_rpart), as.numeric(df_test_sub$classe)))
+
+# observations vs predictions
+cmModrpart$table
+```
+49.96% accuracy is low, even though the predicted errors seem acceptable (RMSE = 1.47 and R2 = 0.33). From the table, we can also see many wrong predictions. Therefore we need try other modeling method for better modeling accuracy
+
+
+## Train with Gradient Boosting model
+```{r}
+set.seed(2021)
+modxgb <- train(classe ~., data = df_train_sub, method = "xgbTree",
+                trControl = trainControl("cv", number = 10))
+                
+
+# Model Accuracy
+pred_train_xgb <- predict(modxgb, df_test_sub)
+
+cmModxgb <- confusionMatrix(pred_train_xgb, df_test_sub$classe)
+
+data.frame(Accuracy = cmModxgb$overall[1], 
+           RMSE = RMSE(as.numeric(pred_train_xgb), as.numeric(df_test_sub$classe)),
+           R2 = R2(as.numeric(pred_train_xgb), as.numeric(df_test_sub$classe)))
+
+# Observations vs Predictions
+cmModxgb$table
+```
+As shown, the gradient boosting model accuracy is the best 99.8%. And the model explains 99.8% of all the vairability wherase the average difference between training and test subset is pretty small, RMSE = 0.0658. The prediction is pretty clear
+
+## Conclusion
+Above has shown that the gradient boosting model is the best one. The prediction of test data is as following
+```{r}
+predict(modxgb, newdata = test_df)
+```
+
+
