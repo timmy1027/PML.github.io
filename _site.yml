@@ -1,9 +1,9 @@
 name: "personal-website"
 output_dir: "."
 navbar:
-  title: "Personal Website"
+  title: "Coursera Assignment"
   left:
-    - text: "Home"
-      href: index.html
+    - text: "Final Project"
+      href: machine_learning_project.html
     - text: "About Me"
       href: about.html
